@@ -1,118 +1,136 @@
+import os
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from telegram.error import BadRequest
+import asyncio
+import urllib.request
+import json
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+from threading import Thread
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-# Enable logging
+# 1. Enable Logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# --- CONFIGURATION ---
-BOT_TOKEN = "8747299464:AAESNSeAMaCJAFD-jIuNQeyZp2dJDMausO0"
-# The channel ID must start with -100. (e.g., -100123456789)
-# Tip: Add your bot to the channel as an ADMINISTRATOR so it can check member status.
-CHANNEL_ID = "-1002375727016" 
-CHANNEL_INVITE_LINK = "https://t.me/forrestfranksongs"
+# ==========================================
+# CONFIGURATION
+# ==========================================
+BOT_TOKEN = "8747299464:AAESNSeAMaCJAFD-jiUNQey2_mC6D5gH-g8"  
+CHANNEL_ID = "-1002375727016"  
 
-# A simple hardcoded database of lyrics for demonstration.
-# In production, you can connect this to an external API (like Genius) or a database.
-LYRICS_DATABASE = {
-    "blinding lights": "I've been tryna call...\nI've been on my own for long enough...",
-    "shape of you": "The club isn't the best place to find a lover...\nSo the bar is where I go...",
-    "bohemian rhapsody": "Is this the real life?\nIs this just fantasy?..."
-}
-
-async def is_user_subscribed(bot, user_id: int) -> bool:
-    """Checks if the user is a member, administrator, or creator of the target channel."""
+# ==========================================
+# FULL LYRICS FETCHING FUNCTION (Web API)
+# ==========================================
+def fetch_full_lyrics(song_title):
+    """
+    Searches a public API to get the absolute full lyrics dynamically.
+    """
     try:
-        member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        if member.status in ["member", "administrator", "creator"]:
-            return True
-        return False
-    except BadRequest as e:
-        # Handles cases where the bot configuration or user ID might be invalid
-        logger.error(f"Error checking chat member: {e}")
-        return False
+        # Clean the input query for the API URL
+        query = urllib.parse.quote(f"Forrest Frank {song_title}")
+        url = f"https://api.lyrics.ovh/v1/Forrest%20Frank/{urllib.parse.quote(song_title)}"
+        
+        # Request lyrics safely
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            if "lyrics" in data and data["lyrics"].strip():
+                return data["lyrics"]
+    except Exception as e:
+        logger.error(f"Error fetching from primary lyrics API: {e}")
+    
+    # Fallback backup message if the API fails or doesn't have the collab yet
+    return None
 
-async def send_join_request_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends a message with a button linking to the channel and a verify button."""
-    keyboard = [
-        [InlineKeyboardButton("📢 Join Channel", url=CHANNEL_INVITE_LINK)],
-        [InlineKeyboardButton("✅ I have joined!", callback_data="check_subscription")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = "⚠️ **Access Denied!**\n\nYou must join our official channel first before you can use this bot to get lyrics."
-    
-    if update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-    elif update.callback_query:
-        await update.callback_query.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+# ==========================================
+# TELEGRAM BOT HANDLERS
+# ==========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the /start command."""
-    user_id = update.effective_user.id
-    
-    if await is_user_subscribed(context.bot, user_id):
-        await update.message.reply_text(
-            "👋 Welcome to the Lyrics Bot! Send me the name of a song, and I'll find the lyrics for you."
-        )
-    else:
-        await send_join_request_message(update, context)
+    welcome_text = (
+        "👋 Welcome to the Ultimate Forrest Frank Hub Bot!\n\n"
+        "I can give you the COMPLETE lyrics to any Forrest Frank song or collaboration.\n\n"
+        "🎵 **How to use:**\n"
+        "Type `/lyrics <song name>`\n"
+        "Example: `/lyrics good day` or `/lyrics altar`"
+    )
+    await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Processes lyrics requests only if the user is subscribed."""
-    user_id = update.effective_user.id
-    
-    if not await is_user_subscribed(context.bot, user_id):
-        await send_join_request_message(update, context)
+async def get_lyrics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❌ Please specify a song name.\nExample: `/lyrics up!`", parse_mode="Markdown")
         return
-
-    song_query = update.message.text.lower().strip()
-    await update.message.reply_text(f"🔍 Searching for lyrics to: '{update.message.text}'...")
-
-    # Look up lyrics in our dummy database
-    if song_query in LYRICS_DATABASE:
-        await update.message.reply_text(f"🎵 **Lyrics for {update.message.text}:**\n\n{LYRICS_DATABASE[song_query]}", parse_mode="Markdown")
+        
+    song_query = " ".join(context.args).strip()
+    await update.message.reply_text(f"🔍 Searching for the complete lyrics to *'{song_query}'*...", parse_mode="Markdown")
+    
+    # Get complete lyrics dynamically
+    full_lyrics = fetch_full_lyrics(song_query)
+    
+    if full_lyrics:
+        # Prevent Telegram message character limits from breaking the bot
+        if len(full_lyrics) > 4000:
+            full_lyrics = full_lyrics[:3900] + "\n\n...(Lyrics truncated due to length)"
+            
+        response_text = f"🎶 **Complete Lyrics for '{song_query.title()}' by Forrest Frank:**\n\n{full_lyrics}"
     else:
-        await update.message.reply_text("❌ Sorry, I couldn't find lyrics for that song. Try 'Blinding Lights' or 'Shape of You'!")
-
-async def check_subscription_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the inline button click verifying subscription."""
-    query = update.callback_query
-    await query.answer() # Acknowledge button click
-    
-    user_id = query.from_user.id
-    
-    if await is_user_subscribed(context.bot, user_id):
-        await query.message.delete() # Clean up the join prompt
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="🎉 Thank you for joining! You now have full access. Send me a song name to get started!"
+        # Beautiful failure message showing his complete main list if typing was wrong
+        response_text = (
+            f"⚠️ Could not automatically extract the text for '{song_query.title()}'.\n\n"
+            "💡 Make sure you spelled it correctly! Try searching popular ones like:\n"
+            "• Good Day\n• Up! (feat. Connor Price)\n• Altar (feat. Hulvey)\n"
+            "• No Longer Bound\n• Never Get Used To This (feat. JVKE)\n• Thankful\n• Lemonade"
         )
-    else:
-        # Alert banner at top of Telegram screen
-        await query.answer("❌ You still haven't joined the channel. Please join first!", show_alert=True)
+        
+    await update.message.reply_text(response_text)
 
+async def handle_audio_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.audio:
+        audio_file_id = update.message.audio.file_id
+        caption = update.message.caption or f"🎵 {update.message.audio.title or 'Forrest Frank Track'}"
+        try:
+            await context.bot.send_audio(
+                chat_id=CHANNEL_ID,
+                audio=audio_file_id,
+                caption=f"{caption}\n\n📢 Shared via @ForrestFrank Hub"
+            )
+            await update.message.reply_text("🚀 Track successfully deployed and posted to your channel!")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Failed to forward to channel. Error: {e}")
+
+# ==========================================
+# RENDER KEEP-ALIVE WEB ENGINE
+# ==========================================
+class HealthCheckHandler(SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"Forrest Frank Engine Online!")
+
+def run_health_server():
+    server = HTTPServer(("0.0.0.0", 8080), HealthCheckHandler)
+    server.serve_forever()
+
+# ==========================================
+# MAIN APPLICATON STARTUP
+# ==========================================
 def main():
-    """Starts the bot."""
-    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE" or CHANNEL_ID == "-100XXXXXXXXXXXXXXXX":
-        print("Please configure your BOT_TOKEN and CHANNEL_ID before running.")
-        return
+    server_thread = Thread(target=run_health_server)
+    server_thread.daemon = True
+    server_thread.start()
 
-    application = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    # Handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_subscription$"))
-    # Handle all text messages except commands
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("lyrics", get_lyrics))
+    app.add_handler(MessageHandler(filters.AUDIO, handle_audio_upload))
 
-    # Run the bot until Ctrl-C is pressed
-    print("Bot is running...")
-    application.run_polling()
+    print("Bot is starting up...")
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
