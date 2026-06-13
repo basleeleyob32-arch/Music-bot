@@ -112,7 +112,7 @@ class HealthCheckHandler(SimpleHTTPRequestHandler):
         self.wfile.write(b"Forrest Frank Engine Online!")
 
 def run_health_server():
-    server = HTTPServer(("0.0.0.0", 8080), HealthCheckHandler)
+    server = HTTPServer(("0.0.0.0", 10000), HealthCheckHandler)
     server.serve_forever()
 
 # ==========================================
