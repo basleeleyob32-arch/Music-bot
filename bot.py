@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # ==========================================
 # CONFIGURATION
 # ==========================================
-BOT_TOKEN = "8747299464:AAESNSeAMaCJAFD-jIuNQeyZp2dJDMausO0"  
+BOT_TOKEN = "8747299464:AAHyF1pyJ-ISKtSAjGiXeYJucgvTDG40_uA"  
 CHANNEL_ID = "-1002375727016"  
 
 # ==========================================
