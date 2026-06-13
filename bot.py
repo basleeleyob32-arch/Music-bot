@@ -11,7 +11,7 @@ import lyricsgenius
 # ==========================================
 BOT_TOKEN = "8747299464:AAFqYZTvm0Sh8tFDOcqj8UioBcrtnO2P4y8"
 CHANNEL_ID = "-1002375727016" 
-GENIUS_TOKEN = "L69NI1b_IIx1lCWGcNxKhGt2ciPdcHBV7o6bFbSprFUBCAvIUExbEXdm_97Ylowi"
+GENIUS_TOKEN = "-UY65LSwM2Vpt1IXo1HfqiaW8muX2KEH7QIcrKzCY5RzffIkbdbI0ijG3"
 
 # Initialize Clients with Advanced Stability Settings
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
