@@ -11,7 +11,7 @@ from telebot import types
 # CONFIGURATION
 # ==========================================
 
-BOT_TOKEN = "8747299464:AAG5JWw3SLYDbf4ydp4Stz5jTxTk7oM1CE0"
+BOT_TOKEN = "8747299464:AAEBhUAvvDpF8VnhwPtkILXOxY2HdV8uS2s"
 CHANNEL_ID = "-1002375727016"
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
